@@ -1,0 +1,65 @@
+# ============================================================
+# PYTHON
+# ============================================================
+
+# Entorno virtual de uv — se regenera con "uv sync"
+.venv/
+
+# Cache de bytecode — se genera automáticamente
+__pycache__/
+*.pyc
+*.pyo
+
+# Archivos de distribución Python
+*.egg-info/
+dist-python/
+
+# ============================================================
+# VARIABLES DE ENTORNO — NUNCA SUBIR AL REPOSITORIO
+# ============================================================
+
+# Configuraciones locales y secretos
+.env
+.env.local
+.env.*.local
+
+# ============================================================
+# LOGS — Solo útiles en tu máquina local
+# ============================================================
+
+# Archivos de log generados por el script Python
+logs/
+
+# ============================================================
+# ASTRO JS / NODE
+# ============================================================
+
+# Dependencias de Node — se reinstalan con "npm install"
+node_modules/
+
+# Build de producción de Astro — GitHub Actions lo genera en el pipeline
+# Si subes dist/ manualmente, entras en conflicto con el deploy automático
+dist/
+
+# Cache de Astro
+.astro/
+
+# ============================================================
+# SISTEMA OPERATIVO
+# ============================================================
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# macOS
+.DS_Store
+
+# ============================================================
+# VS CODE
+# ============================================================
+
+# Configuración personal del editor (opcional — algunos equipos sí la comparten)
+.vscode/settings.json
+.vscode/launch.jsonexplorar_api.py
+explorar_api.py

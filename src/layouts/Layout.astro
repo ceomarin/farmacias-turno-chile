@@ -1,0 +1,66 @@
+---
+import "../styles/global.css";
+// src/layouts/Layout.astro
+// Layout base que envuelve todas las páginas
+// Contiene meta tags de SEO, Open Graph y seguridad
+
+interface Props {
+    title: string;
+    description: string;
+}
+
+const { title, description } = Astro.props;
+
+// URL pública del sitio — usada en meta tags de Open Graph
+const siteUrl = "https://ceomarin.github.io/farmacias-turno-chile";
+const ogImage = `${siteUrl}/og-image.png`;
+---
+
+<!doctype html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+        <!-- ================================================
+         SEO BÁSICO
+         ================================================ -->
+        <title>{title}</title>
+        <meta name="description" content={description} />
+        <meta name="author" content="César Marin" />
+        <link rel="canonical" href={siteUrl} />
+
+        <!-- ================================================
+         OPEN GRAPH — preview en WhatsApp, LinkedIn, etc.
+         ================================================ -->
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={siteUrl} />
+        <meta property="og:title" content={title} />
+        <meta property="og:description" content={description} />
+        <meta property="og:image" content={ogImage} />
+        <meta property="og:locale" content="es_CL" />
+
+        <!-- Twitter/X card -->
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={title} />
+        <meta name="twitter:description" content={description} />
+        <meta name="twitter:image" content={ogImage} />
+
+        <!-- ================================================
+         META TAGS DE SEGURIDAD
+         ================================================ -->
+        <!-- CSP básico: solo carga recursos del mismo origen -->
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';" />
+        <!-- Evita que el browser adivine el tipo MIME de los archivos -->
+        <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+        <!-- No envía el referrer al navegar a otros sitios -->
+        <meta name="referrer" content="no-referrer" />
+
+        <!-- Favicon -->
+        <link rel="icon" type="image/svg+xml" href="/farmacias-turno-chile/favicon.svg" />
+    </head>
+
+    <body class="bg-gray-50 min-h-screen">
+        <slot />
+    </body>
+</html>

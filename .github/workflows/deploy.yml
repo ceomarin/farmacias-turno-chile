@@ -1,0 +1,144 @@
+# .github/workflows/deploy.yml
+# ============================================================
+# WORKFLOW DE DEPLOY AUTOMÁTICO
+# Se activa en cada push a main
+# Flujo: Python fetcha datos → Astro hace build → Pages despliega
+# ============================================================
+
+name: Deploy a GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # Permite que update-data.yml dispare este workflow
+  workflow_call:
+
+# Permisos mínimos necesarios para publicar en GitHub Pages
+# Principio de mínimos permisos: solo lo que el job necesita
+permissions:
+  contents: read      # leer el repositorio
+  pages: write        # publicar en GitHub Pages
+  id-token: write     # autenticarse con GitHub Pages via OIDC
+
+# Evita deploys simultáneos — si hay dos pushes seguidos,
+# cancela el anterior y corre solo el más reciente
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+
+  # ============================================================
+  # JOB 1: Obtener datos frescos de la API
+  # ============================================================
+  fetch-data:
+    name: Obtener datos del MINSAL
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Instalar dependencias Python
+        run: uv sync
+
+      - name: Correr script de obtención de datos
+        env:
+          # En GitHub Actions no hay .env — las variables van aquí
+          API_URL: https://midas.minsal.cl/farmacia_v2/WS/getLocalesTurnos.php
+          API_TIMEOUT: "10"
+          API_MAX_RETRIES: "3"
+          LOG_LEVEL: INFO
+        run: uv run python scripts/fetch_farmacias.py
+
+      - name: Verificar que el JSON fue generado
+        run: |
+          if [ ! -f "src/data/farmacias.json" ]; then
+            echo "ERROR: farmacias.json no fue generado"
+            exit 1
+          fi
+          echo "✅ farmacias.json generado correctamente"
+          echo "📊 Farmacias: $(cat src/data/farmacias.json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["total"])')"
+
+      # Publica los logs como artefacto descargable
+      # Útil para diagnosticar fallos sin acceder al servidor
+      - name: Publicar logs como artefacto
+        if: always()  # siempre, incluso si el paso anterior falló
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-python
+          path: logs/
+          retention-days: 7
+
+      # Pasamos el JSON al siguiente job via artefacto
+      - name: Guardar JSON para el build
+        uses: actions/upload-artifact@v4
+        with:
+          name: farmacias-json
+          path: src/data/farmacias.json
+
+  # ============================================================
+  # JOB 2: Build del sitio con Astro
+  # ============================================================
+  build:
+    name: Build con Astro
+    runs-on: ubuntu-latest
+    needs: fetch-data  # espera que fetch-data termine exitosamente
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Descargar JSON generado por Python
+        uses: actions/download-artifact@v4
+        with:
+          name: farmacias-json
+          path: src/data/
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Instalar dependencias Node
+        run: npm ci
+
+      - name: Configurar GitHub Pages
+        uses: actions/configure-pages@v4
+
+      - name: Build con Astro
+        run: npm run build
+
+      - name: Subir artefacto de Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  # ============================================================
+  # JOB 3: Deploy a GitHub Pages
+  # ============================================================
+  deploy:
+    name: Deploy a GitHub Pages
+    runs-on: ubuntu-latest
+    needs: build  # espera que build termine exitosamente
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy a GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Resumen del deploy
+        run: |
+          echo "## ✅ Deploy exitoso" >> $GITHUB_STEP_SUMMARY
+          echo "🌐 Sitio publicado en: ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "🕐 Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
