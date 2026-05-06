@@ -99,6 +99,36 @@ npm run build
 - Headers `User-Agent` identificados en las peticiones HTTP
 - Logging sin datos personales de usuarios finales
 
+## ⚠️ Limitaciones conocidas
+
+### Bloqueo de API MINSAL en GitHub Actions
+
+La API del MINSAL bloquea peticiones HTTP provenientes de IPs de
+GitHub Actions (datacenter de Microsoft Azure). El pipeline no puede
+llamar a la API directamente.
+
+**Solución implementada:** el JSON de farmacias se genera localmente
+y se versiona en el repositorio. El pipeline solo hace el build de
+Astro con el JSON existente.
+
+**Para actualizar los datos:**
+
+```bash
+# 1. Generar datos frescos localmente
+uv run python scripts/fetch_farmacias.py
+
+# 2. Commitear el JSON actualizado
+git add src/data/farmacias.json
+git commit -m "chore: actualizar datos farmacias $(date '+%Y-%m-%d')"
+
+# 3. Push a develop y PR a main
+git push origin develop
+```
+
+**Solución futura:** implementar un proxy intermedio (Cloudflare Worker
+o VPS propio) que llame al MINSAL y reenvíe la respuesta. GitHub Actions
+llamaría al proxy en lugar de al MINSAL directamente.
+
 ### Frontend
 
 - Interpolación de variables con `{}` en Astro — escape automático de XSS
