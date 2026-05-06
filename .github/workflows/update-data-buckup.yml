@@ -1,0 +1,119 @@
+# .github/workflows/update-data.yml
+# ============================================================
+# WORKFLOW DE ACTUALIZACIÓN PROGRAMADA
+# Corre cada 24 horas, fetcha datos frescos y si cambiaron
+# hace commit automático y dispara el deploy
+# ============================================================
+
+name: Actualizar datos de farmacias
+
+on:
+  # Cron: corre todos los días a las 08:00 UTC (05:00 Chile)
+  # Formato: minuto hora día mes día-semana
+  schedule:
+    - cron: "0 8 * * *"
+  # Permite dispararlo manualmente desde GitHub
+  workflow_dispatch:
+
+permissions:
+  contents: write  # necesita escribir para hacer commit del JSON
+  actions: write   # necesita disparar el workflow de deploy
+
+jobs:
+  update:
+    name: Actualizar farmacias.json
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+        with:
+          # Token con permisos para hacer push
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Instalar dependencias Python
+        run: uv sync
+
+      - name: Guardar JSON anterior para comparar
+        run: |
+          if [ -f "src/data/farmacias.json" ]; then
+            cp src/data/farmacias.json src/data/farmacias_anterior.json
+          fi
+
+      - name: Correr script de obtención de datos
+        env:
+          API_URL: https://midas.minsal.cl/farmacia_v2/WS/getLocalesTurnos.php
+          API_TIMEOUT: "10"
+          API_MAX_RETRIES: "3"
+          LOG_LEVEL: INFO
+        run: uv run python scripts/fetch_farmacias.py
+
+      - name: Comparar datos y hacer commit si cambiaron
+        id: check-changes
+        run: |
+          # Extraer solo las farmacias para comparar (ignorar generado_en)
+          python3 -c "
+          import json
+
+          with open('src/data/farmacias.json') as f:
+              nuevo = json.load(f)
+
+          # Si no hay archivo anterior, siempre hay cambios
+          try:
+              with open('src/data/farmacias_anterior.json') as f:
+                  anterior = json.load(f)
+              # Comparamos solo las farmacias, no el timestamp
+              hay_cambios = nuevo['farmacias'] != anterior['farmacias']
+              total_anterior = anterior['total']
+          except FileNotFoundError:
+              hay_cambios = True
+              total_anterior = 0
+
+          total_nuevo = nuevo['total']
+          print(f'Total anterior: {total_anterior}')
+          print(f'Total nuevo: {total_nuevo}')
+          print(f'Hay cambios: {hay_cambios}')
+
+          # Escribir variable para GitHub Actions
+          with open('/tmp/cambios.txt', 'w') as f:
+              f.write('true' if hay_cambios else 'false')
+          with open('/tmp/total.txt', 'w') as f:
+              f.write(str(total_nuevo))
+          "
+
+          HAY_CAMBIOS=$(cat /tmp/cambios.txt)
+          TOTAL=$(cat /tmp/total.txt)
+
+          echo "hay_cambios=$HAY_CAMBIOS" >> $GITHUB_OUTPUT
+          echo "total=$TOTAL" >> $GITHUB_OUTPUT
+
+          # Limpiar archivo temporal
+          rm -f src/data/farmacias_anterior.json
+
+      - name: Commit y push si hay cambios
+        if: steps.check-changes.outputs.hay_cambios == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/data/farmacias.json
+          git commit -m "chore: actualizar farmacias de turno [$(date -u '+%Y-%m-%d %H:%M UTC')]"
+          git push
+
+      - name: Disparar workflow de deploy
+        if: steps.check-changes.outputs.hay_cambios == 'true'
+        run: |
+          gh workflow run deploy.yml
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resumen de la actualización
+        run: |
+          echo "## 📊 Actualización de datos" >> $GITHUB_STEP_SUMMARY
+          echo "- **Farmacias encontradas:** ${{ steps.check-changes.outputs.total }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Hubo cambios:** ${{ steps.check-changes.outputs.hay_cambios }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
